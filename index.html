@@ -1,56 +1,272 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Google Sheet Electronics Tracker</title>
+  <meta charset="UTF-8" />
+  <title>Electronics Tracker</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    body { padding: 30px; }
+    .section { margin-top: 40px; }
+    .kit-component { display: flex; gap: 10px; margin-bottom: 10px; }
+    .badge { font-size: 0.9em; }
+  </style>
 </head>
-<body class="p-4">
-  <h3>🔧 Electronics Tracker (Google Sheet)</h3>
-  <form id="addForm" class="row g-3 my-3">
-    <div class="col-md-3"><input class="form-control" id="name" placeholder="Component Name" required></div>
-    <div class="col-md-2"><input class="form-control" id="qty" type="number" placeholder="Quantity" required></div>
-    <div class="col-md-3"><input class="form-control" id="loc" placeholder="Location"></div>
-    <div class="col-md-4"><button class="btn btn-primary" type="submit">Add Component</button></div>
-  </form>
+<body>
+  <div class="container">
+    <h2 class="text-center mb-4">🔧 Electronics Component & Kit Tracker</h2>
 
-  <h5 class="mt-4">📦 Current Inventory</h5>
-  <table class="table table-bordered">
-    <thead><tr><th>Name</th><th>Quantity</th><th>Location</th></tr></thead>
-    <tbody id="inventoryTable"></tbody>
-  </table>
+    <!-- COMPONENT SECTION -->
+    <div class="section">
+      <h4>Add Component</h4>
+      <form id="componentForm" class="row g-3">
+        <div class="col-md-3"><input type="text" class="form-control" id="compName" placeholder="Component Name" required></div>
+        <div class="col-md-2"><input type="number" class="form-control" id="compQty" placeholder="Quantity" required></div>
+        <div class="col-md-3"><input type="text" class="form-control" id="compLoc" placeholder="Location"></div>
+        <div class="col-md-4"><button type="submit" class="btn btn-primary">Add Component</button></div>
+      </form>
 
-<script>
-  const API_URL = "https://script.google.com/macros/s/AKfycbxZOkEL0A4X9WgSxdjpwirG_d9P7oKeyQ5Mnb5pVeMnHIFXy630rrXVYFYYU2L1fvQlGg/exec";
+      <h5 class="mt-4">Inventory</h5>
+      <table class="table table-bordered" id="compTable">
+        <thead class="table-light"><tr><th>Name</th><th>Quantity</th><th>Location</th><th>Actions</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
 
-  async function loadInventory() {
-    const res = await fetch(API_URL);
-    const data = await res.json();
-    const table = document.getElementById("inventoryTable");
-    table.innerHTML = "";
-    data.forEach(item => {
-      table.innerHTML += `<tr><td>${item.Name}</td><td>${item.Quantity}</td><td>${item.Location}</td></tr>`;
+    <!-- KIT CREATION SECTION -->
+    <div class="section">
+      <h4>Create Kit</h4>
+      <form id="kitForm">
+        <input type="text" class="form-control mb-2" id="kitName" placeholder="Kit Name" required>
+        <div id="kitComponents"></div>
+        <button type="button" class="btn btn-secondary mb-2" onclick="addKitComponent()">+ Add Component</button>
+        <button type="submit" class="btn btn-success">Create Kit</button>
+      </form>
+
+      <h5 class="mt-4">Available Kits</h5>
+      <ul class="list-group" id="kitList"></ul>
+    </div>
+
+    <!-- ASSIGN KIT SECTION -->
+    <div class="section">
+      <h4>Assign / Return Kit</h4>
+      <form id="assignForm" class="row g-3">
+        <div class="col-md-4"><input type="text" class="form-control" id="studentName" placeholder="Student Name" required></div>
+        <div class="col-md-4">
+          <select class="form-select" id="kitSelect" required><option value="">Select Kit</option></select>
+        </div>
+        <div class="col-md-4">
+          <button class="btn btn-success" type="submit">Give Kit</button>
+          <button class="btn btn-warning" type="button" id="returnKitBtn">Return Kit</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- INDIVIDUAL COMPONENT SECTION -->
+    <div class="section">
+      <h4>Give Individual Component</h4>
+      <form id="singleForm" class="row g-3">
+        <div class="col-md-4">
+          <input type="text" class="form-control" id="singleName" placeholder="Student Name" required>
+        </div>
+        <div class="col-md-4">
+          <select class="form-select" id="singleComponent" required>
+            <option value="">Select Component</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <input type="number" class="form-control" id="singleQty" placeholder="Qty" required>
+        </div>
+        <div class="col-md-2">
+          <button type="submit" class="btn btn-info">Give</button>
+        </div>
+      </form>
+    </div>
+    <!-- LOG SECTION -->
+    <div class="section">
+      <h4>Activity Log</h4>
+      <ul class="list-group" id="logList"></ul>
+    </div>
+  </div>
+
+  <script>
+    let components = JSON.parse(localStorage.getItem("components") || "[]");
+    let kits = JSON.parse(localStorage.getItem("kits") || "[]");
+    let logs = JSON.parse(localStorage.getItem("logs") || "[]");
+
+    const compTable = document.querySelector("#compTable tbody");
+    const kitList = document.getElementById("kitList");
+    const kitSelect = document.getElementById("kitSelect");
+    const singleComponent = document.getElementById("singleComponent");
+    const logList = document.getElementById("logList");
+    const kitComponentsDiv = document.getElementById("kitComponents");
+
+    function saveData() {
+      localStorage.setItem("components", JSON.stringify(components));
+      localStorage.setItem("kits", JSON.stringify(kits));
+      localStorage.setItem("logs", JSON.stringify(logs));
+    }
+
+    function renderComponents() {
+      compTable.innerHTML = "";
+      singleComponent.innerHTML = '<option value="">Select Component</option>';
+      components.forEach((c, i) => {
+        compTable.innerHTML += `<tr>
+          <td>${c.name}</td><td>${c.quantity}</td><td>${c.location}</td>
+          <td><button class="btn btn-sm btn-danger" onclick="deleteComponent(${i})">Delete</button></td>
+        </tr>`;
+        if (c.quantity > 0) {
+          singleComponent.innerHTML += `<option value="${i}">${c.name} (${c.quantity})</option>`;
+        }
+      });
+    }
+
+    function renderKits() {
+      kitList.innerHTML = "";
+      kitSelect.innerHTML = '<option value="">Select Kit</option>';
+      kits.forEach((kit, i) => {
+        const itemList = kit.items.map(item => `${item.name} (x${item.qty})`).join(", ");
+        kitList.innerHTML += `<li class="list-group-item"><strong>${kit.name}</strong>: ${itemList}</li>`;
+        kitSelect.innerHTML += `<option value="${i}">${kit.name}</option>`;
+      });
+    }
+
+    function renderLogs() {
+      logList.innerHTML = "";
+      logs.slice().reverse().forEach(log => {
+        const li = document.createElement("li");
+        li.className = "list-group-item";
+
+        let color = "secondary", icon = "🔷";
+        if (log.action.includes("Took Kit")) { color = "success"; icon = "✅"; }
+        else if (log.action.includes("Returned Kit")) { color = "warning"; icon = "🔁"; }
+        else if (log.action.includes("Took")) { color = "info"; icon = "📦"; }
+
+        li.innerHTML = `
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <span class="badge bg-${color} me-2">${icon}</span>
+              <strong>${log.person}</strong> → <em>${log.action}</em> <strong>${log.kit}</strong>
+            </div>
+            <small class="text-muted">${log.time}</small>
+          </div>`;
+        logList.appendChild(li);
+      });
+    }
+
+    function deleteComponent(index) {
+      if (confirm("Delete this component?")) {
+        components.splice(index, 1);
+        saveData();
+        renderComponents();
+        renderKits();
+      }
+    }
+
+    document.getElementById("componentForm").addEventListener("submit", e => {
+      e.preventDefault();
+      const name = document.getElementById("compName").value;
+      const qty = parseInt(document.getElementById("compQty").value);
+      const loc = document.getElementById("compLoc").value;
+      components.push({ name, quantity: qty, location: loc });
+      e.target.reset();
+      saveData();
+      renderComponents();
+      renderKits();
     });
-  }
 
-  document.getElementById("addForm").addEventListener("submit", async e => {
-    e.preventDefault();
-    const body = {
-      Name: document.getElementById("name").value,
-      Quantity: parseInt(document.getElementById("qty").value),
-      Location: document.getElementById("loc").value
-    };
+    function addKitComponent() {
+      const div = document.createElement("div");
+      div.className = "kit-component";
+      div.innerHTML = `
+        <select class="form-select comp-name" required>
+          ${components.map(c => `<option value="${c.name}">${c.name}</option>`).join("")}
+        </select>
+        <input type="number" class="form-control comp-qty" placeholder="Qty" required style="width: 100px;">
+        <button type="button" class="btn btn-outline-danger" onclick="this.parentElement.remove()">✖</button>
+      `;
+      kitComponentsDiv.appendChild(div);
+    }
 
-    await fetch(API_URL, {
-      method: "POST",
-      body: JSON.stringify(body),
-      headers: { "Content-Type": "application/json" }
+    document.getElementById("kitForm").addEventListener("submit", e => {
+      e.preventDefault();
+      const name = document.getElementById("kitName").value;
+      const items = Array.from(document.querySelectorAll(".kit-component")).map(div => ({
+        name: div.querySelector(".comp-name").value,
+        qty: parseInt(div.querySelector(".comp-qty").value)
+      }));
+      kits.push({ name, items });
+      e.target.reset();
+      kitComponentsDiv.innerHTML = "";
+      saveData();
+      renderKits();
     });
 
-    e.target.reset();
-    loadInventory();
-  });
+    document.getElementById("assignForm").addEventListener("submit", e => {
+      e.preventDefault();
+      const student = document.getElementById("studentName").value;
+      const kitIndex = parseInt(kitSelect.value);
+      if (isNaN(kitIndex)) return;
+      const kit = kits[kitIndex];
 
-  loadInventory();
-</script>
+      for (const item of kit.items) {
+        const comp = components.find(c => c.name === item.name);
+        if (!comp || comp.quantity < item.qty) {
+          alert(`Not enough ${item.name} in stock!`);
+          return;
+        }
+      }
+
+      kit.items.forEach(item => {
+        const comp = components.find(c => c.name === item.name);
+        comp.quantity -= item.qty;
+      });
+
+      logs.push({ person: student, action: "Took Kit", kit: kit.name, time: new Date().toLocaleString() });
+      saveData();
+      renderComponents();
+      renderLogs();
+      e.target.reset();
+    });
+
+    document.getElementById("returnKitBtn").addEventListener("click", () => {
+      const student = document.getElementById("studentName").value;
+      const kitIndex = parseInt(kitSelect.value);
+      if (isNaN(kitIndex)) return;
+      const kit = kits[kitIndex];
+
+      kit.items.forEach(item => {
+        const comp = components.find(c => c.name === item.name);
+        if (comp) comp.quantity += item.qty;
+      });
+
+      logs.push({ person: student, action: "Returned Kit", kit: kit.name, time: new Date().toLocaleString() });
+      saveData();
+      renderComponents();
+      renderLogs();
+    });
+
+    document.getElementById("singleForm").addEventListener("submit", e => {
+      e.preventDefault();
+      const person = document.getElementById("singleName").value;
+      const index = parseInt(document.getElementById("singleComponent").value);
+      const qty = parseInt(document.getElementById("singleQty").value);
+      if (isNaN(index) || qty <= 0) return;
+      const comp = components[index];
+      if (comp.quantity < qty) {
+        alert("Not enough stock!");
+        return;
+      }
+      comp.quantity -= qty;
+      logs.push({ person, action: `Took ${qty}`, kit: comp.name, time: new Date().toLocaleString() });
+      saveData();
+      renderComponents();
+      renderLogs();
+      e.target.reset();
+    });
+
+    renderComponents();
+    renderKits();
+    renderLogs();
+  </script>
 </body>
 </html>
